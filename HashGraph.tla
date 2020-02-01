@@ -45,13 +45,16 @@ Max(S) ==
 Min(S) ==
     CHOOSE e \in S : \A elt \in S : e <= elt
 
+Parents(x) ==
+    {Lookup(id) : id \in {x.self_parent, x.other_parent}}
+
 (* think variables would make more sense the other way around, sticking
    to paper for now *)
 (* read: y ancestor of x *)
 RECURSIVE Ancestor(_,_)
 Ancestor(x,y) ==
     \/ x = y
-    \/ \E z \in {Lookup(id) : id \in {x.self_parent, x.other_parent}} : Ancestor(z,y)
+    \/ \E z \in Parents(x) : Ancestor(z,y)
 
 RECURSIVE SelfAncestor(_,_)
 SelfAncestor(x,y) ==
@@ -86,84 +89,19 @@ StronglySee(x,y) ==
               /\ See(z,y)
 
 RECURSIVE Round(_)
-RECURSIVE SelfParentRound(_)
-RECURSIVE RoundHelper(_,_)
-RoundHelper(x,previous) ==
-    IF \E S \in SUBSET ToSet(E) :
-        /\ ManyCreators(S)
-        /\ \A y \in S :
-            /\ Round(y) = previous + 1
-            /\ StronglySee(x,y)
-    THEN RoundHelper(x,previous + 1)
-    ELSE previous
 
-(* the literal translation of the functional spec is *)
-(* Round(x) == *)
-(*     Max({SelfParentRound(x)} *)
-(*      \cup { r \in Nat : *)
-(*             \E S \in SUBSET ToSet(E) : *)
-(*              /\ ManyCreators(S) *)
-(*              /\ \A y \in S : *)
-(*                  /\ Round(y) = r - 1 *)
-(*                  /\ StronglySee(x,y) }) *)
-(* which cannot be evaluated by tlc *)
+ParentRound(x) ==
+    Max({1} \cup {Round(y) : y \in Parents(x)})
 
-(* in order to rewrite this into a function tlc can evaluate
-   See(x,y) /\ SelfAncestor(y,z) => See(x,z) is needed.
-   See(x,z) is Ancestor(x,z) /\ P for P being the rest.
-   Since
-   See(x,y) => Ancestor(x,y)
-   and
-   SelfAncestor(y,z) => Ancestor(y,z)
-   hold it follows that
-   See(x,y) /\ SelfAncestor(y,z) => Ancestor(x,y) /\ Ancestor(y,z) => Ancestor(x,z)
-   and since
-   (A => B) /\ (A => C) <=> (A => B /\ C)
-   it remains to show that
-   See(x,y) /\ SelfAncestor(y,z) => P
-   holds.
-   This is equivalent to proving the statement
-   ~P => ~SelfAncestor(y,z) \/ ~See(x,y)
-   Proof:
-   I:
-   ~P = ~P /\ TRUE = (~P /\ SelfAncestor(y,z)) \/ (~P /\ ~SelfAncestor(y,z))
-   => (~P /\ SelfAncestor(y,z)) \/ ~SelfAncestor(y,z))
-   II:
-   ~P = \E (a,b) \in E x E :
-         /\ z.creator = a.creator = b.creator
-         /\ Ancestor(x,a)
-         /\ Ancestor(x,b)
-         /\ ~SelfAncestor(a,b)
-         /\ ~SelfAncestor(b,a)
-   and
-   SelfAncestor(y,z) => y.creator = z.creator
-   thus leading to
-   III:
-   ~P /\ SelfAncestor(y,z) => \E (a,b) \in E x E :
-                               /\ y.creator = a.creator = b.creator
-                               /\ Ancestor(x,a)
-                               /\ Ancestor(x,b)
-                               /\ ~SelfAncestor(a,b)
-                               /\ ~SelfAncestor(b,a)
-   This last implied proposition is ~P'
-   where
-   See(x,y) = Ancestor(x,y) /\ P'
-   which is equivalent to ~See(x,y) = ~Ancestor(x,y) \/ ~P'
-   so ~P' => ~See(x,y) and III: ~P /\ SelfAncestor(y,z) => ~P'
-   leading to IV: ~P /\ SelfAncestor(y,z) => ~See(x,y)
-   using I+IV it follows that ~P => ~See(x,y) \/ ~SelfAncestor(x,y)
-   QED
+RoundInc(x) ==
+    \E S \in SUBSET ToSet(E) :
+     /\ ManyCreators(S)
+     /\ \A y \in S :
+         /\ Round(y) = ParentRound(x)
+         /\ StronglySee(x,y)
 
-   From this result it follows that
-   StronglySee(x,y) /\ SelfParent(y,z) => StronglySee(x,z)
-   *)
-
-
-
-SelfParentRound(x) ==
-    IF x.self_parent = {}
-    THEN 1
-    ELSE Round(Lookup(x.self_parent))
+Round(x) ==
+    ParentRound(x) + IF RoundInc(x) THEN 1 ELSE 0
 
 Witness(x) ==
     \/ x.self_parent = {}
@@ -245,14 +183,6 @@ RoundReceivedHelper(r,x) ==
 
 RoundReceived(x) ==
     RoundReceivedHelper(0,x)
-
-(* Geq(x,y) == x <= y *)
-
-(* Median(S) == *)
-(*     LET sorted == SortSeq(SetToSeq(S),Geq) *)
-(*     IN IF Cardinality(S) % 2 = 0 *)
-(*        THEN (sorted[Cardinality(S) \div 2] + sorted[Cardinality(S) \div 2 + 1]) \div 2 *)
-(*        ELSE sorted[Cardinality(S) \div 2 + 1] *)
 
 Abs(x) ==
     IF x < 0 THEN 0-x
